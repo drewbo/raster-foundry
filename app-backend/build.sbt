@@ -113,6 +113,9 @@ lazy val common = Project("common", file("common"))
     Dependencies.akka,
     Dependencies.akkahttp,
     Dependencies.commonsIO,
+    Dependencies.caffeine,
+    Dependencies.scaffeine,
+    Dependencies.elasticacheClient,
     Dependencies.geotrellisS3
   )})
 
@@ -183,8 +186,6 @@ lazy val tile = Project("tile", file("tile"))
       Dependencies.caffeine,
       Dependencies.scaffeine,
       Dependencies.elasticacheClient,
-      Dependencies.scalacacheCaffeine,
-      Dependencies.scalacacheMemcache.exclude("net.spy", "spymemcached"),
       Dependencies.akkajson
     )
   })
