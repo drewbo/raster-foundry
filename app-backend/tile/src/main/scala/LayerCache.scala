@@ -1,6 +1,7 @@
 package com.azavea.rf.tile
 
 import com.azavea.rf.database.Database
+import com.azavea.rf.common.cache._
 
 import com.github.benmanes.caffeine.cache.Caffeine
 
@@ -44,6 +45,7 @@ object LayerCache extends Config {
   val memcachedClient =
     new MemcachedClient(new InetSocketAddress(memcachedHost, memcachedPort))
 
+
   // TODO: Make a scalacache Codec using Kryo
   implicit val memcached: ScalaCache[Array[Byte]] = {
     ScalaCache(MemcachedCache(memcachedClient))
@@ -69,18 +71,10 @@ object LayerCache extends Config {
   def attributeStore(prefix: Option[String]): Future[S3AttributeStore] =
     attributeStore(defaultBucket, prefix)
 
-  // This cache allows us to make (on a single machine) atomic calls out to memcached
-  val futureTiles: ScaffCache[String, Future[Option[MultibandTile]]] =
-    Scaffeine()
-      .recordStats()
-      .expireAfterWrite(30.second)
-      .maximumSize(500)
-      .build[String, Future[Option[MultibandTile]]]()
 
-
-  def maybeTile(id: RfLayerId, zoom: Int, key: SpatialKey): Future[Option[MultibandTile]] = {
-
-    def fetchTileExpensive: Future[Option[MultibandTile]] =
+  val tileCache = HeapBackedMemcachedClient[Option[MultibandTile]](memcachedClient)
+  def maybeTile(id: RfLayerId, zoom: Int, key: SpatialKey): Future[Option[MultibandTile]] =
+    tileCache.caching(s"tile-$id-$zoom-$key") { cacheKey =>
       for {
         prefix <- id.prefix
         store <- attributeStore(defaultBucket, prefix)
@@ -93,31 +87,7 @@ object LayerCache extends Config {
           case Failure(e) => throw e
         }
       }
-
-    def fetchRemote(cKey: String) = {
-      memcachedClient
-        .asyncGet(cKey)
-        .asFuture[MultibandTile]
-        .flatMap({ maybeTile =>
-          Option(maybeTile) match {
-            case Some(fmtile) => // cache hit
-              Future { Some(fmtile) }
-            case None =>         // cache miss
-              val futureMaybeTile = fetchTileExpensive
-              for {
-                mbTile <- futureMaybeTile
-                tile <- mbTile
-              } { memcachedClient.set(cKey, 30, tile) }
-              futureMaybeTile
-          }
-        })
     }
-
-    val cacheKey = s"tile-$id-$zoom-$key"
-    val futureMaybeTile = futureTiles.get(cacheKey, fetchRemote)
-    futureTiles.put(cacheKey, futureMaybeTile)
-    futureMaybeTile
-  }
 
   // This cache allows us to make (on a single machine) atomic calls out to memcached
   val futureHistograms: ScaffCache[String, Future[Array[Histogram[Double]]]] =

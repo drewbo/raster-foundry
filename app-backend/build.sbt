@@ -168,7 +168,18 @@ lazy val tile = Project("tile", file("tile"))
   .dependsOn(ingest)
   .settings(commonSettings:_*)
   .settings({
-    libraryDependencies ++= testDependencies
+    libraryDependencies ++= loggingDependencies ++ testDependencies ++ Seq(
+      Dependencies.commonsIO,
+      Dependencies.spark,
+      Dependencies.geotrellisSpark,
+      Dependencies.geotrellisS3,
+      Dependencies.caffeine,
+      Dependencies.scaffeine,
+      Dependencies.elasticacheClient,
+      Dependencies.scalacacheMemcache,
+      Dependencies.scalacacheCaffeine,
+      Dependencies.akkajson
+    )
   })
   .settings(assemblyMergeStrategy in assembly := {
     case "reference.conf" => MergeStrategy.concat
@@ -178,18 +189,6 @@ lazy val tile = Project("tile", file("tile"))
     case _ => MergeStrategy.first
   })
   .settings(assemblyJarName in assembly := "rf-tile-server.jar")
-  .settings({
-    libraryDependencies ++= loggingDependencies ++ Seq(
-      Dependencies.commonsIO,
-      Dependencies.spark,
-      Dependencies.geotrellisSpark,
-      Dependencies.geotrellisS3,
-      Dependencies.caffeine,
-      Dependencies.scaffeine,
-      Dependencies.elasticacheClient,
-      Dependencies.akkajson
-    )
-  })
 
 lazy val tool = Project("tool", file("tool"))
   .settings(commonSettings:_*)
