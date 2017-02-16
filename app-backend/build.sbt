@@ -106,7 +106,7 @@ lazy val app = Project("app", file("app"))
 lazy val common = Project("common", file("common"))
   .dependsOn(database, datamodel)
   .settings(appSettings:_*)
-  .settings({libraryDependencies ++= Seq(
+  .settings({libraryDependencies ++= testDependencies ++ Seq(
     Dependencies.jwtCore,
     Dependencies.json4s,
     Dependencies.jwtJson,

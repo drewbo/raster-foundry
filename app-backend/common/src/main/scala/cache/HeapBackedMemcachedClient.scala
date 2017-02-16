@@ -12,15 +12,15 @@ class HeapBackedMemcachedClient[CachedType](
   client: MemcachedClient,
   options: HeapBackedMemcachedClient.Options = HeapBackedMemcachedClient.Options()) {
 
+  /** This key sanitizer replaces whitespace with '_' and throws in case of control characters */
   def sanitizeKey(key: String): String = {
-    assert(key.length <= 250)
-    assert {
-      val blacklist = "[^\u0000-\u001f\u007f-\u009f]".r
-      blacklist.findFirstIn(key) match {
-        case Some(char) => false
-        case None => true
-      }
-    }
+    // Control characters in the unicode spec
+    val blacklist = "[^\u0020-\u007e^\u0009-\u000B]".r
+    assert(key.length <= 250, s"Keys of length 250 or greater are not allowed; key provided has length of ${key.length}")
+    assert(blacklist.findFirstIn(key) match {
+      case Some(char) => false
+      case None => true
+    } , s"Invalid use of control character ( ${blacklist.findFirstIn(key).get} ) detected in key")
     val spaces = "[ \n\t\r]".r
     spaces.replaceAllIn(key, "_")
   }
@@ -46,15 +46,5 @@ object HeapBackedMemcachedClient {
 
   def apply[CachedType](client: MemcachedClient, options: Options = Options()) =
     new HeapBackedMemcachedClient[CachedType](client, options)
-
-  // Example usage
-  implicit val ec: ExecutionContext = ???
-  val cli: MemcachedClient = ???
-  val hbmc = HeapBackedMemcachedClient[Int](cli)
-  def testing(str: String): Future[Int] =
-    hbmc.caching(str) { str =>
-      // Expensive, potentially blocking operations go here
-      Future { str.toInt }
-    }
 }
 

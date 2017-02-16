@@ -18,7 +18,7 @@ package object cache {
           Future { value.asInstanceOf[CachedType] }
         } else { // cache miss
           val futureCached: Future[CachedType] = expensiveOperation(cacheKey)
-          futureCached.foreach({ fromValue => client.set(cacheKey, ttl.toSeconds.toInt, fromValue) })
+          futureCached.foreach({ cachedValue => client.set(cacheKey, ttl.toSeconds.toInt, cachedValue) })
           futureCached
         }
       })
