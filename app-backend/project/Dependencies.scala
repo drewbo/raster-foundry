@@ -40,4 +40,5 @@ object Dependencies {
   val scalacacheCaffeine      = "com.github.cb372"            %% "scalacache-caffeine"               % Version.scalacache
   val elasticacheClient       = "com.amazonaws"                % "elasticache-java-cluster-client"   % Version.elasticacheClient
   val shapeless               = "com.chuusai"                 %% "shapeless"                         % Version.shapeless
+  val findbugAnnotations      = "com.google.code.findbugs"     % "annotations"                       % Version.findbugAnnotations % "compile"
 }

@@ -5,44 +5,42 @@ import net.spy.memcached._
 
 import scala.concurrent._
 import scala.concurrent.duration._
+import scala.util.matching._
+
 
 class HeapBackedMemcachedClient[From](client: MemcachedClient, options: HeapBackedMemcachedClient.Options = HeapBackedMemcachedClient.Options()) {
 
-  private val onHeapCache: ScaffeineCache[String, Future[From]] =
+  def sanitizeKey(key: String): String = {
+    assert(key.length <= 250)
+    assert {
+      val blacklist = "[^\u0000-\u001f\u007f-\u009f]".r
+      blacklist.findFirstIn(key) match {
+        case Some(char) => false
+        case None => true
+      }
+    }
+    val spaces = "[ \n\t\r]".r
+    spaces.replaceAllIn(key, "_")
+  }
+
+  val onHeapCache: ScaffeineCache[String, Future[From]] =
     Scaffeine()
       .recordStats()
-      .expireAfterWrite(options.ttl)
+      .expireAfterAccess(options.ttl)
       .maximumSize(options.maxSize)
       .build[String, Future[From]]()
 
-
-  private def fetchRemote(cacheKey: String, expensiveGet: String => From)(implicit ec: ExecutionContext): Future[From] = {
-    val futureFrom = Future { client.asyncGet(cacheKey).get() }
-    futureFrom.flatMap({ value =>
-      if (value != null) { // cache hit
-        Future { value.asInstanceOf[From] }
-      } else { // cache miss
-        val futureFrom: Future[From] = Future { expensiveGet(cacheKey) }
-        futureFrom.foreach({ fromValue => client.set(cacheKey, options.ttl.toSeconds.toInt, fromValue) })
-        futureFrom
-      }
-    })
-
-  }
-
-  def caching(cacheKey: String)(expensiveGet: String => From)(implicit ec: ExecutionContext): Future[From] = {
-
-    val futureMaybeFrom: Future[From] =
-      onHeapCache.get(cacheKey, { cKey: String => fetchRemote(cKey, expensiveGet) })
-
-      val futureMaybeTile = onHeapCache.get(cacheKey, { cKey: String => fetchRemote(cacheKey, expensiveGet) })
-      onHeapCache.put(cacheKey, futureMaybeTile)
-      futureMaybeTile
+  def caching(cacheKey: String)(expensiveOperation: String => From)(implicit ec: ExecutionContext): Future[From] = {
+    val sanitizedKey = sanitizeKey(cacheKey)
+    val futureFrom: Future[From] =
+      onHeapCache.get(sanitizedKey, { cKey: String => client.getOrSet[From](cKey, expensiveOperation, options.ttl) })
+    onHeapCache.put(sanitizedKey, futureFrom)
+    futureFrom
   }
 }
 
 object HeapBackedMemcachedClient {
-  case class Options(ttl: FiniteDuration = 30.seconds, maxSize: Int = 500)
+  case class Options(ttl: FiniteDuration = 2.seconds, maxSize: Int = 500)
 
   def apply[From](client: MemcachedClient, options: Options = Options()) =
     new HeapBackedMemcachedClient[From](client, options)

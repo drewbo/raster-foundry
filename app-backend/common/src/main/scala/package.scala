@@ -1,7 +1,7 @@
 package com.azavea.rf
 
 
-import net.spy.memcached.internal.GetFuture
+import net.spy.memcached._
 
 import scala.concurrent._
 import scala.concurrent.duration._
@@ -10,21 +10,18 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import java.util.concurrent.{Executors, TimeUnit}
 
 package object common {
-
-  trait isFuture[A] {
-    def asFuture[B]: Future[B]
-  }
-
-  implicit class memcachedFutureIsFuture[A <: AnyRef](fut: GetFuture[A]) extends isFuture[GetFuture[A]] {
-    def asFuture[B]: Future[B] = {
-      val promise = Promise[Object]()
-      new Thread(new Runnable {
-        def run() {
-          promise.complete(Try{ fut.get })
+  implicit class MemcachedClientMethods(client: MemcachedClient) {
+    def getOrSet[CachedType](cacheKey: String, expensiveOperation: String => CachedType, ttl: Duration)(implicit ec: ExecutionContext): Future[CachedType] = {
+      val futureCached = Future { client.asyncGet(cacheKey).get() }
+      futureCached.flatMap({ value =>
+        if (value != null) { // cache hit
+          Future { value.asInstanceOf[CachedType] }
+        } else { // cache miss
+          val futureCached: Future[CachedType] = Future { expensiveOperation(cacheKey) }
+          futureCached.foreach({ fromValue => client.set(cacheKey, ttl.toSeconds.toInt, fromValue) })
+          futureCached
         }
-      }).start
-      promise.future.map({ obj => obj.asInstanceOf[B] })
+      })
     }
   }
-
 }

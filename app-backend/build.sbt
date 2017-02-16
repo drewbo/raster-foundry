@@ -116,7 +116,8 @@ lazy val common = Project("common", file("common"))
     Dependencies.caffeine,
     Dependencies.scaffeine,
     Dependencies.elasticacheClient,
-    Dependencies.geotrellisS3
+    Dependencies.geotrellisS3,
+    Dependencies.findbugAnnotations
   )})
 
 lazy val migrations = Project("migrations", file("migrations"))
