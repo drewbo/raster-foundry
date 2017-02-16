@@ -89,40 +89,13 @@ object LayerCache extends Config {
       }
     }
 
-  // This cache allows us to make (on a single machine) atomic calls out to memcached
-  val futureHistograms: ScaffCache[String, Future[Array[Histogram[Double]]]] =
-    Scaffeine()
-      .recordStats()
-      .expireAfterWrite(30.second)
-      .maximumSize(500)
-      .build[String, Future[Array[Histogram[Double]]]]()
 
-
-  def bandHistogram(id: RfLayerId, zoom: Int): Future[Array[Histogram[Double]]] = {
-    def fetchRemote(cKey: String) = {
-      memcachedClient
-        .asyncGet(cKey)
-        .asFuture[Array[Histogram[Double]]]
-        .flatMap({ hists =>
-          Option(hists) match {
-            case Some(hists) =>
-              Future { hists }
-            case None =>
-              val futureHistograms  = for {
-                prefix <- id.prefix
-                store <- attributeStore(defaultBucket, prefix)
-              } yield store.read[Array[Histogram[Double]]](id.catalogId(0), "histogram")
-              for (
-                histograms <- futureHistograms
-              ) { memcachedClient.set(cKey, 30, histograms) }
-              futureHistograms
-          }
-        })
+  val histogramCache = HeapBackedMemcachedClient[Array[Histogram[Double]]](memcachedClient)
+  def bandHistogram(id: RfLayerId, zoom: Int): Future[Array[Histogram[Double]]] =
+    histogramCache.caching(s"histogram-$id-$zoom") { cacheKey =>
+      for {
+        prefix <- id.prefix
+        store <- attributeStore(defaultBucket, prefix)
+      } yield store.read[Array[Histogram[Double]]](id.catalogId(0), "histogram")
     }
-
-    val cacheKey = s"histogram-$id-$zoom"
-    val futHistograms = futureHistograms.get(cacheKey, fetchRemote)
-    futureHistograms.put(cacheKey, futHistograms)
-    futHistograms
-  }
 }
