@@ -8,6 +8,12 @@ import scala.concurrent.duration._
 import scala.util.matching._
 
 
+/**
+  * Wraps a MemcachedClient to provide a local cache which stores Future results in case
+  *  the call has recently been made and could otherwise result in a race condition.
+  *  Each new instance of this wrapper will have its own instance of a Caffeine
+  *  cache (a guava-inspired java library).
+  */
 class HeapBackedMemcachedClient[CachedType](
   client: MemcachedClient,
   options: HeapBackedMemcachedClient.Options = HeapBackedMemcachedClient.Options()) {
@@ -20,10 +26,14 @@ class HeapBackedMemcachedClient[CachedType](
       .maximumSize(options.maxSize)
       .build[String, Future[CachedType]]()
 
+  /**
+    * The primary means of interaction with this class: pass as key and
+    *  the costly option caching prevents duplication of.
+    */
   def caching(cacheKey: String)(expensiveOperation: String => Future[CachedType])(implicit ec: ExecutionContext): Future[CachedType] = {
     val sanitizedKey = HeapBackedMemcachedClient.sanitizeKey(cacheKey)
     val futureCached: Future[CachedType] =
-      onHeapCache.get(sanitizedKey, { cKey: String => client.getOrSet[CachedType](cKey, expensiveOperation, options.ttl) })
+      onHeapCache.get(sanitizedKey, { cKey: String => client.getOrElseUpdate[CachedType](cKey, expensiveOperation, options.ttl) })
     onHeapCache.put(sanitizedKey, futureCached)
     futureCached
   }
